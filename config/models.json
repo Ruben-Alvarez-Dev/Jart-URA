@@ -1,0 +1,70 @@
+{
+  "port_range": [9000, 9999],
+  "models": [
+    {
+      "name": "qwen3.5-9b",
+      "port": 9001,
+      "source": "local",
+      "engine": "metal",
+      "model_path": "models/qwen3.5-9b-instruct-q4_k_m.gguf",
+      "context": 32768,
+      "gpu_layers": 99,
+      "threads": 6,
+      "type": "chat",
+      "params": {
+        "temperature": 0.7,
+        "top_k": 40,
+        "top_p": 0.9
+      }
+    },
+    {
+      "name": "bge-m3",
+      "port": 9003,
+      "source": "local",
+      "engine": "metal",
+      "model_path": "models/bge-m3-q4_k_m.gguf",
+      "context": 512,
+      "gpu_layers": 99,
+      "threads": 2,
+      "type": "embedding"
+    },
+    {
+      "name": "gpt-4o",
+      "port": 9010,
+      "source": "api",
+      "provider": "openai",
+      "api_model": "gpt-4o",
+      "api_key_env": "OPENAI_API_KEY",
+      "base_url": "https://api.openai.com/v1"
+    },
+    {
+      "name": "claude-sonnet-4",
+      "port": 9011,
+      "source": "api",
+      "provider": "anthropic",
+      "api_model": "claude-sonnet-4-20250514",
+      "api_key_env": "ANTHROPIC_API_KEY",
+      "base_url": "https://api.anthropic.com/v1"
+    }
+  ],
+  "engines": {
+    "metal": {
+      "bin": "engines/metal/llama-metal",
+      "default_args": ["--no-mmap", "--mlock"]
+    },
+    "coreml": {
+      "bin": "engines/coreml/llama-coreml",
+      "default_args": ["--no-mmap"]
+    },
+    "planar3": {
+      "bin": "engines/planar3/llama-planar3",
+      "default_args": ["-ctk", "q4_0", "-ctv", "q4_0"]
+    }
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 9100,
+    "log_dir": "logs/",
+    "pid_dir": "pids/"
+  }
+}
