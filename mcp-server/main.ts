@@ -82,8 +82,9 @@ export async function startStreamableHTTPServer(
     }
   });
 
-  const httpServer = app.listen(port, () => {
-    console.log(`[jart-ura-mcp] MCP server on http://localhost:${port}/mcp`);
+  const httpServer = app.listen(port, "0.0.0.0", () => {
+    console.log(`[jart-ura-mcp] MCP server on http://0.0.0.0:${port}/mcp`);
+    console.log(`[jart-ura-mcp] Standalone GUI on http://0.0.0.0:${port}/`);
     console.log(`[jart-ura-mcp] Jart-URA API at ${process.env.JART_URA_BASE || "http://localhost:9100"}`);
   });
 
