@@ -258,9 +258,10 @@ Jart-URA/
 │   ├── config-parser.js      → Config validation and parsing with port dedup
 │   ├── process-manager.js    → Local process lifecycle with auto-restart
 │   └── api-proxy.js          → Remote API forwarder with timeout handling
-├── mcp-server/               → MCP Apps dashboard (separate process)
+├── mcp-server/               → MCP Apps + standalone dashboard (separate process)
 │   ├── server.ts             → Tools + UI resource registration
-│   ├── main.ts               → stdio / Streamable HTTP transport
+│   ├── main.ts               → stdio / Streamable HTTP transport + API proxy
+│   ├── standalone.html       → Standalone web GUI (any browser, no MCP needed)
 │   ├── mcp-app.html          → Dashboard UI (renders in Claude, ChatGPT, VS Code)
 │   └── src/mcp-app.ts        → UI logic with live polling via ext-apps SDK
 ├── server.js                 → Core server: orchestration, health, registry, shutdown
@@ -323,15 +324,29 @@ Jart-OS-AI captures all prompts, responses, and thinking traces before forwardin
 
 ---
 
-## MCP Dashboard
+## Dashboard
 
-Jart-URA ships with an [MCP Apps](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) server (`mcp-server/`) that provides an interactive dashboard for model management. The dashboard renders in any MCP Apps-compatible client: Claude, ChatGPT, VS Code, Goose.
+Jart-URA ships with two dashboards for model management — both served from the same `mcp-server/` process.
+
+### Standalone Web GUI
+
+Open **`http://localhost:3100`** in any browser. No MCP client needed. Talks directly to Jart-URA's management API with live polling.
 
 ```
-Client ──MCP──→ Jart-URA MCP (:3100) ──HTTP──→ Jart-URA (:9100)
+Browser ──fetch──→ MCP Server (:3100) ──fetch──→ Jart-URA (:9100)
+                    │
+                    └── GET / → standalone.html
+```
+
+### MCP Apps Dashboard
+
+Renders inline in Claude, ChatGPT, VS Code, or Goose. Uses the `get-dashboard` tool to open an interactive UI inside the conversation.
+
+```
+Client ──MCP──→ MCP Server (:3100) ──HTTP──→ Jart-URA (:9100)
                   │
-                  └── UI resource: dashboard.html
-                      (live polling in sandboxed iframe)
+                  └── ui://jart-ura/dashboard.html
+                      (sandboxed iframe, live polling via ext-apps SDK)
 ```
 
 ### Run it
@@ -341,14 +356,16 @@ cd mcp-server
 npm install
 npm run build
 
-# Streamable HTTP (for Claude.ai, ChatGPT, etc.)
+# Streamable HTTP (for Claude.ai, ChatGPT, standalone web)
 npm start
 
 # stdio (for Claude Code, Goose, etc.)
 npm start:stdio
 ```
 
-### Tools exposed
+Open **http://localhost:3100** for the standalone GUI, or connect `http://localhost:3100/mcp` as an MCP server endpoint.
+
+### MCP tools
 
 | Tool | Description | Visibility |
 |------|-------------|------------|
@@ -360,7 +377,7 @@ npm start:stdio
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MCP_PORT` | `3100` | MCP server port (HTTP transport) |
+| `MCP_PORT` | `3100` | MCP server and standalone dashboard port |
 | `JART_URA_BASE` | `http://localhost:9100` | Jart-URA management API base URL |
 
 ---

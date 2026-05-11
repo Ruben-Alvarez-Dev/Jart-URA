@@ -3,8 +3,20 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import cors from "cors";
+import fs from "node:fs";
+import path from "node:path";
 import type { Request, Response } from "express";
 import { createServer } from "./server.js";
+
+const STANDALONE_HTML = fs.readFileSync(
+  path.resolve(
+    import.meta.filename.endsWith(".ts")
+      ? import.meta.dirname
+      : path.join(import.meta.dirname, ".."),
+    "standalone.html",
+  ),
+  "utf-8",
+);
 
 export async function startStreamableHTTPServer(
   createServer: () => McpServer,
@@ -13,6 +25,37 @@ export async function startStreamableHTTPServer(
 
   const app = createMcpExpressApp({ host: "0.0.0.0" });
   app.use(cors());
+
+  const jartUraBase = process.env.JART_URA_BASE || "http://localhost:9100";
+
+  app.get("/", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(STANDALONE_HTML);
+  });
+
+  // Proxy API calls from the standalone dashboard to Jart-URA (avoids CORS)
+  app.all("/api/jart-ura/*", async (req: Request, res: Response) => {
+    const targetPath = req.path.replace("/api/jart-ura", "");
+    const targetUrl = `${jartUraBase}${targetPath}${req.url.includes("?") ? req.url.substring(req.url.indexOf("?")) : ""}`;
+    try {
+      const apiRes = await fetch(targetUrl, {
+        method: req.method,
+        headers: { "content-type": req.headers["content-type"] as string || "application/json" },
+        body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
+      });
+      res.status(apiRes.status);
+      apiRes.headers.forEach((v, k) => {
+        if (!["content-encoding", "transfer-encoding", "connection"].includes(k)) {
+          res.setHeader(k, v);
+        }
+      });
+      const text = await apiRes.text();
+      res.end(text);
+    } catch (err) {
+      console.error("[proxy] error:", err);
+      res.status(502).json({ error: "Failed to reach Jart-URA", target: jartUraBase });
+    }
+  });
 
   app.all("/mcp", async (req: Request, res: Response) => {
     const server = createServer();

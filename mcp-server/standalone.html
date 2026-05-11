@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
+  <title>Jart-URA Dashboard</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-muted: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --blue: #58a6ff;
+      --orange: #d29922;
+      --accent: #2f81f7;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 24px;
+      font-size: 14px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+    }
+
+    .title small {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 400;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+
+    .btn:hover { background: #21262d; }
+    .btn.active { background: var(--accent); border-color: var(--accent); }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .dot.green { background: var(--green); }
+    .dot.red { background: var(--red); }
+    .dot.orange { background: var(--orange); }
+    .dot.blue { background: var(--blue); }
+
+    .summary {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 18px;
+      flex: 1;
+    }
+
+    .card-value {
+      font-size: 26px;
+      font-weight: 700;
+    }
+    .card-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .card.blue .card-value { color: var(--blue); }
+    .card.green .card-value { color: var(--green); }
+    .card.red .card-value { color: var(--red); }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table th {
+      text-align: left;
+      padding: 8px 12px;
+      font-size: 12px;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .table tr:hover td {
+      background: rgba(255,255,255,0.03);
+    }
+
+    .model-name { font-weight: 500; }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+    }
+    .tag.local { background: rgba(88, 166, 255, 0.15); color: var(--blue); }
+    .tag.api { background: rgba(210, 153, 34, 0.15); color: var(--orange); }
+
+    .empty {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-muted);
+    }
+
+    .footer {
+      margin-top: 20px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 12px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .error-state {
+      text-align: center;
+      padding: 40px;
+      color: var(--red);
+    }
+
+    .config-link {
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .config-link:hover { text-decoration: underline; }
+
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      .summary { flex-direction: column; }
+      .table th:nth-child(4),
+      .table td:nth-child(4) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div>
+      <div class="title">Jart-URA <small>Dashboard</small></div>
+    </div>
+    <div class="controls">
+      <button id="poll-btn" class="btn active">Stop Polling</button>
+      <span class="status-badge">
+        <span id="status-dot" class="dot green"></span>
+        <span id="status-text">Live</span>
+      </span>
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="card blue">
+      <div class="card-value" id="total-models">--</div>
+      <div class="card-label">Total Models</div>
+    </div>
+    <div class="card green">
+      <div class="card-value" id="running-models">--</div>
+      <div class="card-label">Running</div>
+    </div>
+    <div class="card red">
+      <div class="card-value" id="failed-models">--</div>
+      <div class="card-label">Failed</div>
+    </div>
+  </div>
+
+  <div class="section-title">Models</div>
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Status</th>
+        <th>Name</th>
+        <th>Type</th>
+        <th>Port</th>
+        <th>Provider / Model</th>
+      </tr>
+    </thead>
+    <tbody id="models-body">
+      <tr><td colspan="5" class="empty">Connecting to Jart-URA...</td></tr>
+    </tbody>
+  </table>
+
+  <div id="footer" class="footer">
+    <span id="status-msg">Connecting...</span>
+    <span><a id="jartura-link" class="config-link" href="#">Jart-URA API</a></span>
+  </div>
+
+  <script>
+    const JART_URA_BASE = '/api/jart-ura';
+
+    const POLL_INTERVAL = 3000;
+
+    const modelsBody = document.getElementById('models-body');
+    const totalEl = document.getElementById('total-models');
+    const runningEl = document.getElementById('running-models');
+    const failedEl = document.getElementById('failed-models');
+    const pollBtn = document.getElementById('poll-btn');
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const statusMsg = document.getElementById('status-msg');
+    const jarturaLink = document.getElementById('jartura-link');
+
+    jarturaLink.href = JART_URA_BASE;
+
+    let polling = true;
+    let pollTimer = null;
+
+    function fmtBytes(bytes) {
+      if (!bytes) return '';
+      const gb = bytes / 1024 / 1024 / 1024;
+      return gb >= 1 ? `${gb.toFixed(1)} GB` : `${(bytes / 1024 / 1024).toFixed(0)} MB`;
+    }
+
+    function fmtUptime(seconds) {
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const parts = [];
+      if (d > 0) parts.push(`${d}d`);
+      if (h > 0) parts.push(`${h}h`);
+      if (m > 0 || parts.length === 0) parts.push(`${m}m`);
+      return parts.join(' ');
+    }
+
+    function render(models, health) {
+      totalEl.textContent = health.models.total;
+      runningEl.textContent = health.models.running;
+      failedEl.textContent = health.models.failed;
+
+      if (!models || models.length === 0) {
+        modelsBody.innerHTML = `<tr><td colspan="5" class="empty">No models configured</td></tr>`;
+        return;
+      }
+
+      modelsBody.innerHTML = models.map(m => `
+        <tr>
+          <td><span class="dot ${m.status === 'running' ? 'green' : 'red'}"></span></td>
+          <td class="model-name">${m.name}</td>
+          <td><span class="tag ${m.source}">${m.source}</span></td>
+          <td>:${m.port}</td>
+          <td>${m.provider || '-'} ${m.api_model ? '· ' + m.api_model : ''}</td>
+        </tr>
+      `).join('');
+    }
+
+    function setStatus(ok, msg) {
+      statusDot.className = `dot ${ok ? 'green' : 'red'}`;
+      statusText.textContent = ok ? 'Live' : 'Error';
+    }
+
+    async function fetchData() {
+      try {
+        const [modelsRes, healthRes] = await Promise.all([
+          fetch(`${JART_URA_BASE}/v1/models`),
+          fetch(`${JART_URA_BASE}/health`)
+        ]);
+
+        if (!modelsRes.ok || !healthRes.ok) {
+          throw new Error(`API returned ${modelsRes.status} / ${healthRes.status}`);
+        }
+
+        const modelsData = await modelsRes.json();
+        const health = await healthRes.json();
+        const models = modelsData.data;
+
+        render(models, health);
+        setStatus(true, 'Live');
+        statusMsg.textContent = `${models.length} models · ${health.models.running} running · ${fmtUptime(Math.floor(Date.now() / 1000))}`;
+      } catch (err) {
+        setStatus(false, 'Error');
+        statusMsg.textContent = `Connection error: ${err.message}`;
+        if (!modelsBody.querySelector('.empty')) {
+          modelsBody.innerHTML = `<tr><td colspan="5" class="error-state">Failed to reach Jart-URA at ${JART_URA_BASE}</td></tr>`;
+        }
+      }
+    }
+
+    function startPolling() {
+      if (polling) return;
+      polling = true;
+      pollBtn.textContent = 'Stop Polling';
+      pollBtn.classList.add('active');
+      fetchData();
+      pollTimer = setInterval(fetchData, POLL_INTERVAL);
+    }
+
+    function stopPolling() {
+      polling = false;
+      pollBtn.textContent = 'Start Polling';
+      pollBtn.classList.remove('active');
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    }
+
+    pollBtn.addEventListener('click', () => {
+      if (polling) stopPolling();
+      else startPolling();
+    });
+
+    fetchData();
+    pollTimer = setInterval(fetchData, POLL_INTERVAL);
+  </script>
+</body>
+</html>
