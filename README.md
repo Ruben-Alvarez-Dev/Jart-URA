@@ -290,24 +290,27 @@ Jart-URA/
 - [x] Model isolation (crash one, others keep running)
 - [x] Streaming response support
 
-### v2 (near-term)
+### v2 (current)
+
 - [x] MCP Apps interactive dashboard (Claude, ChatGPT, VS Code)
+- [x] Standalone web GUI (any browser, no MCP client needed)
 - [ ] Config hot-reload (no restart needed)
 - [ ] Rate limiting per API key
 - [ ] Request logging and token usage tracking
-- [ ] `llama-server` log rotation
 
 ### v3 (mid-term)
+
 - [ ] Multi-machine mesh: mDNS discovery + remote model proxy
 - [ ] Automatic model distribution across machines
 - [ ] GPU memory pooling across local models
 - [ ] Dynamic model loading/unloading
+- [ ] `llama-server` log rotation
 
 ### Future
+
 - [ ] Token management and API key rotation
 - [ ] Load balancing across machines
 - [ ] Automatic fallback between equivalent models
-- [ ] MCP Apps integration for model switching
 
 ---
 

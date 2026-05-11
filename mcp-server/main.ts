@@ -28,20 +28,13 @@ export async function startStreamableHTTPServer(
 
   const jartUraBase = process.env.JART_URA_BASE || "http://localhost:9100";
 
-  app.get("/", (_req: Request, res: Response) => {
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.end(STANDALONE_HTML);
-  });
-
-  // Proxy API calls from the standalone dashboard to Jart-URA (avoids CORS)
-  app.all("/api/jart-ura/*", async (req: Request, res: Response) => {
+  async function proxyToJartUra(req: Request, res: Response) {
     const targetPath = req.path.replace("/api/jart-ura", "");
-    const targetUrl = `${jartUraBase}${targetPath}${req.url.includes("?") ? req.url.substring(req.url.indexOf("?")) : ""}`;
+    const targetUrl = `${jartUraBase}${targetPath}`;
     try {
       const apiRes = await fetch(targetUrl, {
         method: req.method,
-        headers: { "content-type": req.headers["content-type"] as string || "application/json" },
-        body: req.method === "GET" || req.method === "HEAD" ? undefined : JSON.stringify(req.body),
+        headers: { "content-type": "application/json" },
       });
       res.status(apiRes.status);
       apiRes.headers.forEach((v, k) => {
@@ -49,13 +42,19 @@ export async function startStreamableHTTPServer(
           res.setHeader(k, v);
         }
       });
-      const text = await apiRes.text();
-      res.end(text);
-    } catch (err) {
-      console.error("[proxy] error:", err);
-      res.status(502).json({ error: "Failed to reach Jart-URA", target: jartUraBase });
+      res.end(await apiRes.text());
+    } catch {
+      res.status(502).json({ error: "Cannot reach Jart-URA", target: jartUraBase });
     }
+  }
+
+  app.get("/", (_req: Request, res: Response) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.end(STANDALONE_HTML);
   });
+
+  app.get("/api/jart-ura/v1/models", (req: Request, res: Response) => proxyToJartUra(req, res));
+  app.get("/api/jart-ura/health", (req: Request, res: Response) => proxyToJartUra(req, res));
 
   app.all("/mcp", async (req: Request, res: Response) => {
     const server = createServer();
