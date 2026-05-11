@@ -258,6 +258,11 @@ Jart-URA/
 │   ├── config-parser.js      → Config validation and parsing with port dedup
 │   ├── process-manager.js    → Local process lifecycle with auto-restart
 │   └── api-proxy.js          → Remote API forwarder with timeout handling
+├── mcp-server/               → MCP Apps dashboard (separate process)
+│   ├── server.ts             → Tools + UI resource registration
+│   ├── main.ts               → stdio / Streamable HTTP transport
+│   ├── mcp-app.html          → Dashboard UI (renders in Claude, ChatGPT, VS Code)
+│   └── src/mcp-app.ts        → UI logic with live polling via ext-apps SDK
 ├── server.js                 → Core server: orchestration, health, registry, shutdown
 ├── tests/                    → Vitest test suite
 │   ├── config-parser.test.mjs
@@ -285,10 +290,10 @@ Jart-URA/
 - [x] Streaming response support
 
 ### v2 (near-term)
+- [x] MCP Apps interactive dashboard (Claude, ChatGPT, VS Code)
 - [ ] Config hot-reload (no restart needed)
 - [ ] Rate limiting per API key
 - [ ] Request logging and token usage tracking
-- [ ] Web dashboard for model management
 - [ ] `llama-server` log rotation
 
 ### v3 (mid-term)
@@ -315,6 +320,48 @@ Agent → Jart-OS-AI (:9101) → Jart-URA (:9100) → llama-server (:9001-9099)
 ```
 
 Jart-OS-AI captures all prompts, responses, and thinking traces before forwarding to Jart-URA. This is a separate project with its own test suite.
+
+---
+
+## MCP Dashboard
+
+Jart-URA ships with an [MCP Apps](https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps/) server (`mcp-server/`) that provides an interactive dashboard for model management. The dashboard renders in any MCP Apps-compatible client: Claude, ChatGPT, VS Code, Goose.
+
+```
+Client ──MCP──→ Jart-URA MCP (:3100) ──HTTP──→ Jart-URA (:9100)
+                  │
+                  └── UI resource: dashboard.html
+                      (live polling in sandboxed iframe)
+```
+
+### Run it
+
+```bash
+cd mcp-server
+npm install
+npm run build
+
+# Streamable HTTP (for Claude.ai, ChatGPT, etc.)
+npm start
+
+# stdio (for Claude Code, Goose, etc.)
+npm start:stdio
+```
+
+### Tools exposed
+
+| Tool | Description | Visibility |
+|------|-------------|------------|
+| `get-dashboard` | Full model registry + health, opens interactive UI | model + app |
+| `get-model-detail` | Status for a specific model by name | model + app |
+| `poll-model-status` | Live polling data for dashboard updates | app-only |
+
+### Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MCP_PORT` | `3100` | MCP server port (HTTP transport) |
+| `JART_URA_BASE` | `http://localhost:9100` | Jart-URA management API base URL |
 
 ---
 
