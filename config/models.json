@@ -8,65 +8,10 @@
       "port": 9001,
       "source": "local",
       "engine": "metal",
-      "model_path": "models/qwen2.5-7b-instruct-Q4_K_M.gguf",
-      "context": 16384,
+      "model_path": "models/gta1-7b-q5.gguf",
+      "context": 8192,
       "gpu_layers": 99,
       "threads": 6,
-      "type": "chat"
-    },
-    {
-      "name": "small",
-      "port": 9002,
-      "source": "local",
-      "engine": "metal",
-      "model_path": "models/Qwen3.5-2B-Q4_K_M.gguf",
-      "context": 8192,
-      "gpu_layers": 99,
-      "threads": 2,
-      "type": "chat"
-    },
-    {
-      "name": "embed",
-      "port": 9003,
-      "source": "local",
-      "engine": "metal",
-      "model_path": "models/bge-m3-Q4_K_M.gguf",
-      "context": 512,
-      "gpu_layers": 99,
-      "threads": 2,
-      "type": "embedding"
-    },
-    {
-      "name": "coder",
-      "port": 9004,
-      "source": "local",
-      "engine": "metal",
-      "model_path": "models/Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",
-      "context": 16384,
-      "gpu_layers": 99,
-      "threads": 4,
-      "type": "chat"
-    },
-    {
-      "name": "fast",
-      "port": 9005,
-      "source": "local",
-      "engine": "metal",
-      "model_path": "models/Qwen3-1.7B-Q4_K_M.gguf",
-      "context": 8192,
-      "gpu_layers": 99,
-      "threads": 2,
-      "type": "chat"
-    },
-    {
-      "name": "multi",
-      "port": 9006,
-      "source": "local",
-      "engine": "metal",
-      "model_path": "models/gemma-3n-E2B-it-Q4_K_M.gguf",
-      "context": 8192,
-      "gpu_layers": 99,
-      "threads": 3,
       "type": "chat"
     },
     {

@@ -9,3 +9,7 @@ logs/
 .DS_Store
 logs/
 *.bak
+-e 
+# Runtime symlinks (local machine specific)
+engines/
+models/
