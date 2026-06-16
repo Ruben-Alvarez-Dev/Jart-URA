@@ -1,5 +1,7 @@
 {
   "port_range": [9000, 9999],
+  "mesh_poll_ms": 15000,
+  "peers": [],
   "models": [
     {
       "name": "primary",
@@ -74,7 +76,11 @@
       "provider": "openai",
       "api_model": "gpt-4o",
       "api_key_env": "OPENAI_API_KEY",
-      "base_url": "https://api.openai.com/v1"
+      "base_url": "https://api.openai.com/v1",
+      "type": "chat",
+      "supports_vision": true,
+      "supports_function_calling": true,
+      "max_tokens": 128000
     },
     {
       "name": "claude-sonnet-4",
@@ -83,7 +89,24 @@
       "provider": "anthropic",
       "api_model": "claude-sonnet-4-20250514",
       "api_key_env": "ANTHROPIC_API_KEY",
-      "base_url": "https://api.anthropic.com/v1"
+      "base_url": "https://api.anthropic.com/v1",
+      "type": "chat",
+      "supports_vision": true,
+      "supports_function_calling": true,
+      "max_tokens": 200000
+    },
+    {
+      "name": "gemini-2.5-flash",
+      "port": 9012,
+      "source": "api",
+      "provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash",
+      "api_key_env": "OPENROUTER_API_KEY",
+      "base_url": "https://openrouter.ai/api/v1",
+      "type": "chat",
+      "supports_vision": true,
+      "supports_function_calling": true,
+      "max_tokens": 1048576
     }
   ],
   "engines": {
