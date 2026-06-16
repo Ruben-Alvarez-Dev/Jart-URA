@@ -109,6 +109,44 @@ function humanUptime(ms) {
   return `${s}s`;
 }
 
+// ── health full (per-model metrics) ──────────────────────────────────────────
+
+function handleHealthFull(req, res) {
+  const models = configParser.getModels(CONFIG_PATH);
+  const engines = configStore.readConfig(CONFIG_PATH).engines || {};
+  const modelDetails = models.map((m) => {
+    const isLocal = (m.source || 'local') === 'local';
+    const live = isLocal ? processManager.getModelStatus(m.name) : proxyManager.getProxyStatus(m.name);
+    const running = isLocal ? processManager.isModelRunning(m.name) : proxyManager.isProxyRunning(m.name);
+    return {
+      name: m.name,
+      port: m.port,
+      source: m.source || 'local',
+      engine: isLocal ? m.engine : undefined,
+      provider: m.provider || m.engine,
+      api_model: m.api_model || m.name,
+      status: running ? 'running' : 'stopped',
+      pid: live?.pid ?? null,
+      started_at: live?.startedAt ?? null,
+      uptime: live?.uptimeMs ? humanUptime(live.uptimeMs) : '—',
+      uptime_ms: live?.uptimeMs ?? 0,
+      restarts: live?.restarts ?? 0,
+      last_restart: live?.lastRestart ?? null,
+      last_exit_code: live?.lastExitCode ?? null,
+      log_path: live?.logPath ?? null,
+    };
+  });
+  const running = modelDetails.filter((m) => m.status === 'running').length;
+  json(res, 200, {
+    status: 'ok',
+    hostname: ownHostname,
+    uptime: humanUptime(Date.now() - (process.uptime() * 1000 | 0)),
+    models: { total: models.length, running, failed: models.length - running },
+    peers: meshRegistry.getPeerHealth(),
+    details: modelDetails,
+  });
+}
+
 // ── registry projection ──────────────────────────────────────────────────────
 
 function modelToJson(m, engines) {
@@ -287,6 +325,7 @@ function handleModelLogs(req, res, params, query) {
 
 const routes = [
   ['GET', '/health', handleHealth],
+  ['GET', '/v1/health/full', handleHealthFull],
   ['GET', '/v1/models', handleModels],
   ['GET', '/v1/registry', handleRegistry],
   ['GET', '/v1/engines', handleEnginesList],
