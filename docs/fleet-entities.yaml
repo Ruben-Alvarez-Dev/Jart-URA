@@ -22,13 +22,19 @@ meta:
     configured: "Jart-URA/config/models.json"
     documented: "Jart-URA/ARCHITECTURE.md"
   excluded_mock: "Jart-URA/dashboard/src/data/fleet.js"
-  open_discrepancies:
-    - "ARCHITECTURE names a 'VPS Contabo 24GB' with LiteLLM(:10280)/Qdrant/FRONTIER(:4400);
-       the OBSERVED VPS is ionos (82.223.64.198, 23Gi RAM ~ 24GB) running
-       Jart-OS-remote-server (LiveKit/NATS/Authentik/monitoring) — none of those
-       three present. Size matches; name/services differ. Confirm."
-    - "Mac mini snapshot shows NO llama-server on 9001-9006 and NO :9100 listening
-       at capture → models are 'configured', not 'observed running'."
+  canonical_model: "dashboard/docs/control-center/01-er-model.md is the CANONICAL
+    domain model (hexagonal core, with Provenance + state machines). THIS file is
+    the subordinate observed-inventory feed (the `snapshot` source that model
+    references) — not a rival E-R."
+  resolved:
+    - "VPS = ionos (Tailscale vpn-ruben-vps-ionos 100.77.1.10, public 82.223.64.198),
+       confirmed 2026-06-15 by the UX branch's live curl + this snapshot. The old
+       'Contabo' naming is stale; ARCHITECTURE.md is now mostly corrected (2 residual
+       'contabo-vps' mentions remain at ARCHITECTURE.md lines 248 and 768)."
+  open_notes:
+    - "Mac mini snapshot showed NO llama-server on 9001-9006 and NO :9100 listening
+       at capture → models are 'configured', not 'observed running' (the UX branch
+       independently confirmed Jart-URA was DOWN on 2026-06-15)."
 
 # ── Normalized component taxonomy (Rubén: 'normalizar todo') ──
 component_types:
