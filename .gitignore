@@ -13,3 +13,9 @@ logs/
 # Runtime symlinks (local machine specific)
 engines/
 models/
+-e 
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
