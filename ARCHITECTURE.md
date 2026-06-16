@@ -108,7 +108,7 @@ Actualmente tu infraestructura LLM está fragmentada en 6+ repositorios, 4 máqu
     └───────────────────────┘    └────────────────────────────────┘
                          │               │
     ┌────────────────────┴───────────────┴─────────────────────────┐
-    │              VPS Contabo 24GB (SERVICES)                     │
+    │              VPS ionos 24GB (SERVICES)                     │
     │                                                              │
     │ ┌──────────────────┐ ┌────────────────┐ ┌─────────────────┐ │
     │ │ LiteLLM :10280   │ │ Monitor :10284 │ │ WebUI :10283    │ │
@@ -214,7 +214,7 @@ Renderer ←→ Main Process: contextBridge + ipcRenderer/ipcMain
 
 ### 3.3 Cloud Gateway — LLM_ROUTER (LiteLLM)
 
-**Ubicación**: VPS Contabo (Docker)  
+**Ubicación**: VPS ionos (Docker)  
 **Puertos**: `:10280` (LiteLLM), `:10281` (Postgres), `:10282` (vLLM), `:10283` (WebUI), `:10284` (Monitor)  
 **Config**: `config.yaml` (existente, se amplía)
 
@@ -285,8 +285,8 @@ GET  /api/tuning?model=X&host=Y  # parámetros óptimos
 
 | Componente | Ubicación | Puertos | Tecnología |
 |-----------|-----------|---------|------------|
-| LiveKit Server | VPS Contabo | `:7881/tcp`, `:50000-60000/udp` | WebRTC SFU |
-| LiveKit Agents | VPS Contabo | (dentro de LiveKit) | Silero VAD + turn-taking |
+| LiveKit Server | VPS ionos | `:7881/tcp`, `:50000-60000/udp` | WebRTC SFU |
+| LiveKit Agents | VPS ionos | (dentro de LiveKit) | Silero VAD + turn-taking |
 | STT | Mac Mini M1 | local | whisper.cpp |
 | TTS | Mac Mini M1 | local | Kokoro-82M ONNX |
 
@@ -459,7 +459,7 @@ Navegador/Electron → WebRTC/Opus → LiveKit (VPS) → Agent
 | **Docker Compose** | v2 | Orquestación del stack VPS |
 | **Monitor API** | Python custom | Stats de gasto |
 
-### Capa 4: Servicios (VPS Contabo)
+### Capa 4: Servicios (VPS ionos)
 
 | Tecnología | Versión | Justificación |
 |-----------|---------|---------------|
@@ -544,7 +544,7 @@ Navegador/Electron → WebRTC/Opus → LiveKit (VPS) → Agent
 │    ✅ Traffic cifrado punto a punto              │
 │    ✅ Sin puertos expuestos en firewall          │
 │                                                  │
-│  VPS Contabo:                                    │
+│  VPS ionos:                                    │
 │    ⚠️  LiteLLM (:10280) con auth (master key)   │
 │    ⚠️  PostgreSQL (:10281) solo Tailscale        │
 │    ✅ WebUI (:10283) con usuario/password        │
@@ -604,7 +604,7 @@ Navegador/Electron → WebRTC/Opus → LiveKit (VPS) → Agent
 |------|---------------|------------|
 | **MacBook Pro M1 Max** | JartOS Desktop (Electron) + Jart-URA | LaunchAgent |
 | **Mac Mini M1** | Jart-URA + whisper.cpp (STT) + Kokoro (TTS) | LaunchAgents |
-| **VPS Contabo** | Docker stack (LiteLLM + Postgres + TEI + Qdrant + LiveKit + FRONTIER BENCH) | systemd / docker-compose up -d |
+| **VPS ionos** | Docker stack (LiteLLM + Postgres + TEI + Qdrant + LiveKit + FRONTIER BENCH) | systemd / docker-compose up -d |
 | **Pixel 10** | Companion app (Tailscale) — voz, cámara, notificaciones | App nativa |
 
 ### 9.3 Orden de despliegue
