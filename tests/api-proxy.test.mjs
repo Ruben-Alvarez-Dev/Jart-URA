@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'http';
+import https from 'https';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const TLS_CERT = fs.readFileSync(path.join(__dirname, 'helpers', 'test-cert.pem'));
+const TLS_KEY = fs.readFileSync(path.join(__dirname, 'helpers', 'test-key.pem'));
 
 const require = createRequire(import.meta.url);
 const MODULE_PATH = require.resolve('../src/api-proxy.js');
@@ -13,6 +21,29 @@ function requireProxy() {
 function createMockApi(port, expectedPath, responseData, responseStatus) {
   return new Promise((resolve) => {
     const server = http.createServer((req, res) => {
+      let body = '';
+      req.on('data', (c) => (body += c));
+      req.on('end', () => {
+        const auth = req.headers['authorization'] || '';
+        if (req.url === expectedPath || !expectedPath) {
+          res.writeHead(responseStatus || 200, {
+            'Content-Type': 'application/json',
+            'X-Auth-Received': auth,
+          });
+          res.end(JSON.stringify({ ...responseData, echo_body: JSON.parse(body || '{}'), auth_received: auth }));
+        } else {
+          res.writeHead(404);
+          res.end('Not found');
+        }
+      });
+    });
+    server.listen(port, () => resolve(server));
+  });
+}
+
+function createMockHttpsApi(port, expectedPath, responseData, responseStatus) {
+  return new Promise((resolve) => {
+    const server = https.createServer({ cert: TLS_CERT, key: TLS_KEY }, (req, res) => {
       let body = '';
       req.on('data', (c) => (body += c));
       req.on('end', () => {
@@ -124,6 +155,20 @@ describe('ApiProxy', () => {
 
     expect(res.status).toBe(200);
     expect(res.data.status).toBe('ok');
+    server.close();
+    api.close();
+  });
+
+  it('forwards to HTTPS upstream correctly', async () => {
+    const api = await createMockHttpsApi(19606, '/v1/chat/completions', { choices: [{ message: { content: 'secure-ok' } }] });
+    const ap = requireProxy();
+    const server = ap.createProxy({ name: 'test-https', port: 19706, base_url: 'https://localhost:19606', api_model: 'gpt-4o', api_key_env: 'HTTPS_KEY' });
+
+    process.env.HTTPS_KEY = 'sk-https-test';
+    const res = await request(19706, 'POST', '/v1/chat/completions', { model: 'gpt-4o', messages: [{ role: 'user', content: 'hello' }] });
+
+    expect(res.status).toBe(200);
+    expect(res.data.choices[0].message.content).toBe('secure-ok');
     server.close();
     api.close();
   });

@@ -1,4 +1,5 @@
 const http = require('http');
+const https = require('https');
 const url = require('url');
 
 function buildTargetUrl(baseUrl, reqPath) {
@@ -34,7 +35,8 @@ function createProxy(modelConfig) {
       timeout: 60000,
     };
 
-    const proxyReq = http.request(options, (proxyRes) => {
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const proxyReq = transport.request(options, (proxyRes) => {
       const statusCode = proxyRes.statusCode || 502;
       const respHeaders = { ...proxyRes.headers };
       delete respHeaders['content-encoding'];

@@ -19,9 +19,9 @@ function loadPeers(configPath) {
   }
 }
 
-function fetchPeerModels(hostname) {
+function fetchPeerModels(hostname, port = 9100, scheme = 'http') {
   return new Promise((resolve) => {
-    const url = new URL(`http://${hostname}:9100/v1/models`);
+    const url = new URL(`${scheme}://${hostname}:${port}/v1/models`);
     const proto = url.protocol === 'https:' ? https : http;
     const req = proto.get(url.toString(), { timeout: 5000 }, (res) => {
       let body = '';

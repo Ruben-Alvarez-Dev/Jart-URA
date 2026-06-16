@@ -90,8 +90,13 @@ function startModel(model, engineConfig, pidDir, maxRetries = 3, retryCount = 0)
       }
     });
 
-    // Wait briefly for the process to start
-    setTimeout(() => resolve(child), 100);
+    // Resolve once the child process has started (stdout first data or 2s timeout)
+    const ready = new Promise((r) => {
+      const timer = setTimeout(() => r(), 2000);
+      child.stdout.once('data', () => { clearTimeout(timer); r(); });
+      child.stderr.once('data', () => { clearTimeout(timer); r(); });
+    });
+    ready.then(() => resolve(child));
   });
 }
 
