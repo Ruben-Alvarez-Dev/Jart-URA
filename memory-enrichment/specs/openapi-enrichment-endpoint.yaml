@@ -1,0 +1,267 @@
+openapi: "3.1.0"
+
+info:
+  title: Router-Jart Enrichment API
+  version: "1.0.0"
+  description: |
+    Endpoints de enriquecimiento de memoria expuestos por Router-Jart (:10200).
+
+    El middleware de enriquecimiento actúa de forma transparente en
+    `POST /v1/chat/completions`. Este endpoint standalone (/api/enrich)
+    es para clientes que necesitan enriquecimiento explícito (hooks de IDE,
+    scripts externos, testing).
+
+servers:
+  - url: http://localhost:10200
+    description: Router-Jart local
+
+tags:
+  - name: enrichment
+    description: Enriquecimiento de contexto con memoria
+
+paths:
+
+  /api/enrich:
+    post:
+      operationId: enrichMessages
+      tags: [enrichment]
+      summary: Enriquecer un array de mensajes con contexto de memoria relevante
+      description: |
+        Toma un array de mensajes en formato OpenAI, extrae la señal semántica
+        del último mensaje del usuario, consulta jart-core-memory, e inyecta
+        el contexto relevante en el system prompt.
+
+        Si no hay contexto relevante, devuelve los mensajes sin modificar.
+        Si Jart-Core-Memory no está disponible, devuelve los mensajes sin modificar.
+
+        **Idempotente**: si el system prompt ya contiene [JART-MEMORY, no inyecta de nuevo.
+
+        **Uso en hooks de IDE**:
+        ```bash
+        curl -s -X POST http://localhost:10200/api/enrich \
+          -H "Content-Type: application/json" \
+          -d '{"messages": [{"role": "user", "content": "texto del usuario"}], "agent_id": "claude-code"}'
+        ```
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EnrichRequest"
+            examples:
+              simple:
+                summary: Un mensaje de usuario
+                value:
+                  messages:
+                    - role: user
+                      content: "qué configuración tiene Router-Jart actualmente?"
+                  agent_id: "claude-code"
+              with_system:
+                summary: Con system prompt existente
+                value:
+                  messages:
+                    - role: system
+                      content: "Eres Ramiro, asistente de Rubén."
+                    - role: user
+                      content: "revisa el estado del sistema de memoria"
+                  agent_id: "executor"
+                  token_budget: 1500
+      responses:
+        "200":
+          description: Mensajes enriquecidos (o sin modificar si no hay contexto relevante)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichResponse"
+              examples:
+                enriched:
+                  summary: Con contexto inyectado
+                  value:
+                    messages:
+                      - role: system
+                        content: |
+                          [JART-MEMORY: contexto semánticamente relevante]
+                          • [L3/0.91] Router-Jart escucha en :10200, LiteLLM en :10201
+                          • [L4/0.87] MCP-agent-memory usa Qdrant en :6333
+                          • [L3/0.78] Backpack API sidecar en :8890 (deprecar en Fase C)
+                          [/JART-MEMORY]
+                    injection_text: "..."
+                    facts_count: 3
+                    was_enriched: true
+                    latency_ms: 187.3
+                not_enriched:
+                  summary: Sin contexto relevante
+                  value:
+                    messages:
+                      - role: user
+                        content: "hola"
+                    injection_text: ""
+                    facts_count: 0
+                    was_enriched: false
+                    latency_ms: 42.1
+                degraded:
+                  summary: Memory service caído — degradación silenciosa
+                  value:
+                    messages:
+                      - role: user
+                        content: "qué tal el sistema?"
+                    injection_text: ""
+                    facts_count: 0
+                    was_enriched: false
+                    latency_ms: 501.0
+                    degraded: true
+                    degradation_reason: "memory_service_timeout"
+        "422":
+          description: Request inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+
+  /api/enrich/health:
+    get:
+      operationId: getEnrichmentHealth
+      tags: [enrichment]
+      summary: Estado del subsistema de enriquecimiento
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichHealthResponse"
+
+  /api/enrich/config:
+    get:
+      operationId: getEnrichmentConfig
+      tags: [enrichment]
+      summary: Configuración activa del enriquecimiento
+      description: Devuelve los parámetros con los que está operando el middleware.
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EnrichConfig"
+
+components:
+  schemas:
+
+    Message:
+      type: object
+      required: [role, content]
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+
+    EnrichRequest:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+          minItems: 1
+          description: Array de mensajes en formato OpenAI
+        agent_id:
+          type: string
+          default: "shared"
+          description: Identificador del agente / cliente
+        token_budget:
+          type: integer
+          default: 2000
+          minimum: 100
+          maximum: 8000
+          description: Máximo de tokens de memoria a inyectar
+        model:
+          type: string
+          description: Nombre del modelo destino (para token counting preciso)
+
+    EnrichResponse:
+      type: object
+      required: [messages, was_enriched, latency_ms]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Message"
+          description: Mensajes originales, posiblemente con system prompt enriquecido
+        injection_text:
+          type: string
+          description: Texto exacto que se inyectó (vacío si was_enriched=false)
+        facts_count:
+          type: integer
+          description: Número de hechos inyectados
+        was_enriched:
+          type: boolean
+          description: true si se inyectó contexto, false si se devuelven los mensajes sin modificar
+        latency_ms:
+          type: number
+          description: Latencia total del proceso de enriquecimiento
+        degraded:
+          type: boolean
+          default: false
+          description: true si el servicio de memoria no respondió (timeout/error)
+        degradation_reason:
+          type: string
+          enum: [memory_service_timeout, memory_service_error, no_relevant_facts, already_enriched, query_too_short]
+
+    EnrichHealthResponse:
+      type: object
+      properties:
+        middleware_status:
+          type: string
+          enum: [active, disabled]
+        memory_service:
+          type: string
+          enum: [reachable, unreachable]
+        memory_service_url:
+          type: string
+        last_enrichment_at:
+          type: string
+          format: date-time
+        enrichment_rate_1h:
+          type: number
+          description: Porcentaje de peticiones enriquecidas en la última hora
+        avg_latency_ms_1h:
+          type: number
+        avg_facts_injected_1h:
+          type: number
+
+    EnrichConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        memory_url:
+          type: string
+        token_budget:
+          type: integer
+        min_score:
+          type: number
+        timeout_ms:
+          type: integer
+        cache_ttl_s:
+          type: integer
+        skip_agent_ids:
+          type: array
+          items:
+            type: string
+        injection_style:
+          type: string
+          enum: [block, inline]
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc: { type: array, items: { type: string } }
+              msg: { type: string }
+              type: { type: string }

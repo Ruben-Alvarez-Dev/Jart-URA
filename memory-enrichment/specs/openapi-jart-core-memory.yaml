@@ -1,0 +1,562 @@
+openapi: "3.1.0"
+
+info:
+  title: Jart-Core-Memory
+  version: "1.0.0"
+  description: |
+    Servicio central de infraestructura de memoria para Jart-OS.
+    Gestiona almacenamiento vectorial (Qdrant), embeddings y retrieval semántico.
+    Consumido por MCP-agent-memory (thin) y Router-Jart (EnrichmentMiddleware).
+
+    **Puerto por defecto**: 8891
+    **Reemplaza**: Backpack API (:8890, sidecar de MCP-agent-memory)
+
+  contact:
+    name: Jart-URA
+  license:
+    name: Privado
+
+servers:
+  - url: http://localhost:8891
+    description: Local development
+
+tags:
+  - name: context
+    description: Retrieval y enriquecimiento de contexto
+  - name: ingest
+    description: Ingesta de nuevas memorias
+  - name: search
+    description: Búsqueda semántica raw
+  - name: embed
+    description: Cómputo de embeddings
+  - name: ops
+    description: Operaciones y salud del sistema
+
+paths:
+
+  # ─── CONTEXT ─────────────────────────────────────────────────────────────────
+
+  /api/context:
+    post:
+      operationId: getContext
+      tags: [context]
+      summary: Recuperar contexto relevante para una query
+      description: |
+        Busca en las colecciones Qdrant los hechos semánticamente más relevantes
+        para la query proporcionada, los rankea y los devuelve formateados
+        para inyección directa en el system prompt de un LLM.
+
+        La búsqueda es paralela en las 3 colecciones activas.
+        El resultado está truncado al token_budget especificado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContextRequest"
+            examples:
+              basic:
+                summary: Query básica
+                value:
+                  query: "cómo está configurado Router-Jart"
+                  agent_id: "director"
+                  token_budget: 1500
+              full:
+                summary: Query con todas las opciones
+                value:
+                  query: "estado del sistema de memoria y colecciones Qdrant"
+                  agent_id: "executor"
+                  token_budget: 2000
+                  min_score: 0.70
+                  collections: ["L0_L4_memory", "L3_facts"]
+                  intent: "debug"
+      responses:
+        "200":
+          description: Contexto recuperado (puede ser vacío si no hay facts relevantes)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContextResponse"
+        "422":
+          description: Request inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "503":
+          description: Qdrant o embedding service no disponibles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceError"
+
+  # ─── INGEST ──────────────────────────────────────────────────────────────────
+
+  /api/ingest:
+    post:
+      operationId: ingestMemory
+      tags: [ingest]
+      summary: Almacenar una nueva memoria o evento
+      description: |
+        Embebe el contenido, lo almacena en Qdrant con los metadatos proporcionados,
+        y lo enencola para consolidación L0→L4 si aplica.
+
+        El almacenamiento es asíncrono por defecto (status: queued).
+        Para almacenamiento síncrono, usar sync: true.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IngestRequest"
+            examples:
+              event:
+                summary: Evento de agente
+                value:
+                  content: "Decidido usar BackpackAdapter en Fase A para no bloquear con Fase B"
+                  event_type: "decision"
+                  source: "director-agent"
+                  actor_id: "director"
+                  session_id: "session-abc123"
+                  metadata:
+                    project: "jart-memory-enrichment"
+                    phase: "A"
+              fact:
+                summary: Hecho semántico
+                value:
+                  content: "Router-Jart escucha en el puerto 10200"
+                  event_type: "fact"
+                  source: "manual"
+                  metadata:
+                    layer: 3
+                    scope: "infrastructure"
+                    change_speed: "slow"
+      responses:
+        "201":
+          description: Memoria almacenada o encolada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IngestResponse"
+        "422":
+          description: Request inválida
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+
+  /api/ingest/batch:
+    post:
+      operationId: ingestBatch
+      tags: [ingest]
+      summary: Ingesta de múltiples memorias en lote
+      description: Embebe y almacena hasta 50 memorias en una sola llamada.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/IngestRequest"
+                  minItems: 1
+                  maxItems: 50
+      responses:
+        "200":
+          description: Resultado del lote
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  stored: { type: integer }
+                  queued: { type: integer }
+                  errors: { type: integer }
+                  ids: { type: array, items: { type: string } }
+
+  # ─── SEARCH ──────────────────────────────────────────────────────────────────
+
+  /api/search:
+    post:
+      operationId: searchMemory
+      tags: [search]
+      summary: Búsqueda semántica raw en Qdrant
+      description: |
+        Búsqueda vectorial directa sin formateo de inyección.
+        Útil para tools MCP que necesitan resultados crudos.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SearchResponse"
+
+  # ─── EMBED ───────────────────────────────────────────────────────────────────
+
+  /api/embed:
+    post:
+      operationId: computeEmbedding
+      tags: [embed]
+      summary: Calcular el vector de embedding para un texto
+      description: |
+        Llama al modelo bge-m3 (local :9000) y devuelve el vector de 1024 dimensiones.
+        Con cache habilitado, textos idénticos devuelven el vector cacheado.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text:
+                  type: string
+                  minLength: 1
+                  maxLength: 8192
+                use_cache:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  vector:
+                    type: array
+                    items: { type: number }
+                  dim: { type: integer, example: 1024 }
+                  model: { type: string, example: "bge-m3-Q4_K_M" }
+                  cached: { type: boolean }
+                  latency_ms: { type: number }
+
+  # ─── OPS ─────────────────────────────────────────────────────────────────────
+
+  /api/health:
+    get:
+      operationId: getHealth
+      tags: [ops]
+      summary: Estado de salud del servicio
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        "503":
+          description: Servicio degradado o caído
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /api/stats:
+    get:
+      operationId: getStats
+      tags: [ops]
+      summary: Estadísticas de las colecciones Qdrant
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatsResponse"
+
+  /api/consolidate:
+    post:
+      operationId: triggerConsolidation
+      tags: [ops]
+      summary: Disparar consolidación L0→L4 manualmente
+      description: Útil para debugging o para forzar consolidación tras ingesta masiva.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                dry_run:
+                  type: boolean
+                  default: false
+                  description: Si true, reporta qué consolidaría sin hacerlo
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  consolidated: { type: integer }
+                  promoted: { type: integer }
+                  pruned: { type: integer }
+                  dry_run: { type: boolean }
+
+# ─── COMPONENTS ──────────────────────────────────────────────────────────────────
+
+components:
+  schemas:
+
+    ContextRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: Texto semántico para buscar en la memoria
+        agent_id:
+          type: string
+          default: "shared"
+          description: Identificador del agente que solicita contexto
+        token_budget:
+          type: integer
+          default: 2000
+          minimum: 100
+          maximum: 8000
+          description: Máximo de tokens a incluir en el bloque de inyección
+        min_score:
+          type: number
+          default: 0.65
+          minimum: 0.0
+          maximum: 1.0
+          description: Score mínimo de similitud coseno para incluir un resultado
+        collections:
+          type: array
+          items:
+            type: string
+            enum: [L0_L4_memory, L2_conversations, L3_facts]
+          default: [L0_L4_memory, L3_facts, L2_conversations]
+          description: Colecciones Qdrant donde buscar
+        intent:
+          type: string
+          enum: [answer, plan, review, debug, study]
+          default: answer
+          description: Tipo de tarea para ajustar el perfil de retrieval
+
+    ContextResponse:
+      type: object
+      required: [injection_text, facts, token_estimate, retrieved_at]
+      properties:
+        injection_text:
+          type: string
+          description: Bloque formateado listo para insertar en system prompt. Vacío si no hay facts relevantes.
+        facts:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryFact"
+        token_estimate:
+          type: integer
+          description: Estimación del número de tokens del injection_text
+        retrieved_at:
+          type: string
+          format: date-time
+        latency_ms:
+          type: number
+        profile:
+          type: string
+          description: Perfil de retrieval usado (dev/ops/docs)
+
+    MemoryFact:
+      type: object
+      required: [memory_id, content, score, layer, source]
+      properties:
+        memory_id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        score:
+          type: number
+          minimum: 0.0
+          maximum: 1.0
+          description: Score de similitud coseno
+        layer:
+          type: integer
+          minimum: 0
+          maximum: 5
+          description: Capa de memoria (0=sensory, 1=working, 2=episodic, 3=semantic, 4=narrative, 5=selective)
+        source:
+          type: string
+          description: Origen del hecho (colección Qdrant)
+        created_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+          additionalProperties: true
+
+    IngestRequest:
+      type: object
+      required: [content, event_type]
+      properties:
+        content:
+          type: string
+          minLength: 1
+          maxLength: 32768
+        event_type:
+          type: string
+          enum: [observation, decision, fact, conversation, error, discovery, plan]
+        source:
+          type: string
+          default: "unknown"
+        actor_id:
+          type: string
+          default: "shared"
+        session_id:
+          type: string
+        sync:
+          type: boolean
+          default: false
+          description: Si true, espera a que el embedding esté completo antes de responder
+        metadata:
+          type: object
+          additionalProperties: true
+          properties:
+            project:
+              type: string
+            layer:
+              type: integer
+            scope:
+              type: string
+            change_speed:
+              type: string
+              enum: [realtime, fast, slow, never]
+
+    IngestResponse:
+      type: object
+      properties:
+        memory_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [stored, queued]
+        collection:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+        collection:
+          type: string
+          default: "L0_L4_memory"
+          enum: [L0_L4_memory, L2_conversations, L3_facts]
+        limit:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 100
+        score_threshold:
+          type: number
+          default: 0.5
+        filters:
+          type: object
+          description: Filtros de payload Qdrant en formato nativo
+          additionalProperties: true
+
+    SearchResponse:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResult"
+        total:
+          type: integer
+        query_vector_dim:
+          type: integer
+        latency_ms:
+          type: number
+
+    SearchResult:
+      type: object
+      properties:
+        id:
+          type: string
+        score:
+          type: number
+        payload:
+          type: object
+          additionalProperties: true
+
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        qdrant:
+          type: string
+          enum: [ok, down]
+        embedding:
+          type: string
+          enum: [ok, down]
+        collections:
+          type: object
+          additionalProperties:
+            type: integer
+          description: Nombre de colección → número de documentos
+        uptime_s:
+          type: number
+        version:
+          type: string
+
+    StatsResponse:
+      type: object
+      properties:
+        collections:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              count: { type: integer }
+              size_mb: { type: number }
+              indexed_vectors: { type: integer }
+        total_memories:
+          type: integer
+        disk_mb:
+          type: number
+        embedding_cache_entries:
+          type: integer
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc: { type: array, items: { type: string } }
+              msg: { type: string }
+              type: { type: string }
+
+    ServiceError:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string
+        service:
+          type: string
+          enum: [qdrant, embedding, consolidation]

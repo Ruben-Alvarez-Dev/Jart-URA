@@ -1,0 +1,32 @@
+# Jart-URA (Universal Routing Agent / Universal Routing API)
+# Router de modelos config-driven para Jart-OS Tier-0. Gestiona inferencia local (llama-server) y proxys APIs remotas
+
+## Stack
+- Node.js (>=20), CommonJS modules
+
+## Estructura
+- src/ → Código fuente
+- mcp-server/ → Integración MCP server
+- config/ → Configuración de modelos (models.json)
+- tests/ → Suite de tests
+
+## Comandos clave
+- npm test → Vitest
+- npm run test:coverage → Coverage
+- ./start.sh / ./stop.sh → Gestión de procesos
+- server.js → Entry point
+
+## Convenciones
+- Configuration-driven: models.json define todo
+- Un puerto por modelo (9001-9010+)
+- Health check en cada puerto
+- "jartura" = exhaustion (nomenclatura española)
+- Sin git remote
+
+## Reglas
+- models.json es la única fuente de verdad para routing
+- Cada modelo tiene su puerto asignado — no colisionar
+- Verificar health check de todos los puertos después de cambios
+- start.sh/stop.sh para gestión — no matar procesos manualmente
+
+## Working dir: /Users/ruben/Code/Jart-URA

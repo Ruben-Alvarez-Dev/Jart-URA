@@ -1,0 +1,256 @@
+# Real fleet entity-relationship map for JART-URA — the data substrate the
+# cinematic dashboard renders. Generated 2026-06-15.
+#
+# PROVENANCE per entity (this is what makes it real, not a mock):
+#   observed       — seen in a node snapshot (Jart-UP/_snapshots/*, 2026-06-11)
+#   configured     — declared in Jart-URA/config/models.json
+#   documented     — ARCHITECTURE.md target design (NOT confirmed deployed)
+#   hardware-spec  — known from the chip/SKU (e.g. Apple M1); confirm exact counts
+# EXCLUDED: dashboard/src/data/fleet.js (MOCK) — none of its values are used.
+#
+# This file now models THREE depths so the camera can zoom piece by piece:
+#   1. machines        (nodes)
+#   2. components       (cpu/gpu/ane/ram/nvme/NICs/buses inside each machine)
+#   3. transports + datapaths (the cable/wifi/tunnel links and the physical hop
+#                              sequence each request travels through)
+# Live status/metrics come from /v1/registry + health probes at runtime.
+
+meta:
+  generated: "2026-06-15"
+  sources:
+    observed: "Jart-UP/_snapshots/macmini-20260611, vps1-ionos-20260611"
+    configured: "Jart-URA/config/models.json"
+    documented: "Jart-URA/ARCHITECTURE.md"
+  excluded_mock: "Jart-URA/dashboard/src/data/fleet.js"
+  open_discrepancies:
+    - "ARCHITECTURE names a 'VPS Contabo 24GB' with LiteLLM(:10280)/Qdrant/FRONTIER(:4400);
+       the OBSERVED VPS is ionos (82.223.64.198, 23Gi RAM ~ 24GB) running
+       Jart-OS-remote-server (LiveKit/NATS/Authentik/monitoring) — none of those
+       three present. Size matches; name/services differ. Confirm."
+    - "Mac mini snapshot shows NO llama-server on 9001-9006 and NO :9100 listening
+       at capture → models are 'configured', not 'observed running'."
+
+# ── Normalized component taxonomy (Rubén: 'normalizar todo') ──
+component_types:
+  compute: [cpu, gpu, ane, vcpu]
+  memory: [unified-ram, ram]
+  storage: [nvme, virtual-disk]
+  io: [nic-ethernet, nic-wifi, loopback, vpn-tunnel, docker-bridge]
+  bus: [unified-memory, nvme-link, pcie-thunderbolt, virtio]
+
+# ── Protocols / channels (coloured flows; UX picks the final neon palette) ──
+protocols:
+  - { id: http-openai, label: "HTTP · OpenAI spec", ports: ["9001-9012"], accent: cyan }
+  - { id: http-mgmt,   label: "HTTP · Jart-URA mgmt", ports: ["9100"], accent: cyan }
+  - { id: http-web,    label: "HTTP · web UI / API", ports: ["10001-16002"], accent: teal }
+  - { id: websocket,   label: "WebSocket (LiveKit)", ports: ["7881"], accent: violet }
+  - { id: webrtc,      label: "WebRTC · Opus", ports: ["443/udp", "50000-50100/udp", "5349"], accent: magenta }
+  - { id: wireguard,   label: "Tailscale · WireGuard", ports: ["41641/udp"], accent: green }
+  - { id: nats,        label: "NATS", ports: ["4222", "8222"], accent: amber }
+  - { id: redis,       label: "Redis", ports: ["6379"], accent: red }
+  - { id: postgres,    label: "PostgreSQL", ports: ["5432"], accent: blue }
+  - { id: ssh,         label: "SSH", ports: ["22"], accent: slate }
+
+# ── Transports / physical+logical links (the cables, wifi, tunnels) ──
+transports:
+  - id: lan-home
+    medium: "copper Ethernet + Wi-Fi (802.11)"
+    subnet: "192.168.1.0/24"
+    members: ["mac-mini-m1/en0 (ethernet, active)", "macbook-pro-m1max (192.168.1.44)"]
+    provenance: observed
+  - id: wan-internet
+    medium: "public internet"
+    reaches: ["vps-ionos (82.223.64.198)", "cloud-apis (openai/anthropic/openrouter)"]
+    provenance: observed
+  - id: tailscale-overlay
+    medium: "WireGuard, UDP/41641 (encrypted mesh over LAN/WAN)"
+    subnet: "100.x (MagicDNS)"
+    members: ["mac-mini-m1 100.77.1.20", "macbook-pro 100.77.1.30", "vps-ionos 100.77.1.10", "remote-server-2 100.118.124.101", "pixel/samsung/xiaomi"]
+    provenance: observed
+  - id: vps-docker-net
+    medium: "virtual bridges (172.18-28.x) + veth pairs"
+    note: "proxy ↔ container and container ↔ container inside the VPS"
+    provenance: observed
+
+# ── Machines (nodes) with internal components ──
+machines:
+  - id: mac-mini-m1
+    provenance: observed
+    role: "TIER-0-METAL · inference primary"
+    type: desktop
+    os: "macOS 26.5 (arm64)"
+    net: { tailscale: "100.77.1.20", lan: "192.168.1.50" }
+    components:
+      compute:
+        - { id: cpu, kind: cpu, label: "Apple M1 CPU", provenance: hardware-spec, note: "confirm P/E core count" }
+        - { id: gpu, kind: gpu, label: "Apple M1 GPU (Metal)", used_by: ["llama-server", "ollama"], provenance: hardware-spec }
+        - { id: ane, kind: ane, label: "Apple Neural Engine (16-core)", used_by: ["CoreML: whisper STT, Kokoro TTS"], provenance: hardware-spec }
+      memory:
+        - { id: ram, kind: unified-ram, size_gb: 16, label: "Unified LPDDR — CPU+GPU+ANE share it", provenance: "documented(size)+hardware-spec(unified)" }
+      storage:
+        - { id: nvme, kind: nvme, size_gb: 228, provenance: observed }
+      nics:
+        - { id: en0,   kind: nic-ethernet, addr: "192.168.1.50", state: active,   transport: lan-home,          provenance: observed }
+        - { id: en1,   kind: nic-wifi,     state: inactive,                                                     provenance: observed }
+        - { id: lo0,   kind: loopback,     addr: "127.0.0.1",                                                   provenance: observed }
+        - { id: utun5, kind: vpn-tunnel,   addr: "100.77.1.20",  transport: tailscale-overlay,                  provenance: observed }
+      buses:
+        - { id: uma, kind: unified-memory, label: "Unified Memory fabric (no CPU↔GPU copy)", provenance: hardware-spec }
+        - { id: nvme-link, kind: nvme-link, provenance: hardware-spec }
+    inference:
+      router: { id: jart-ura, port: 9100, provenance: configured, observed_listening: false }
+      models: [primary, small, embed, coder, fast, multi, gpt-4o]
+
+  - id: macbook-pro-m1max
+    provenance: "observed(tailscale) + documented"
+    role: "WORKHORSE"
+    type: laptop
+    os: "macOS"
+    net: { tailscale: "100.77.1.30", lan: "192.168.1.44" }
+    components:
+      compute:
+        - { id: cpu, kind: cpu, label: "Apple M1 Max CPU", provenance: hardware-spec, note: "confirm core count" }
+        - { id: gpu, kind: gpu, label: "Apple M1 Max GPU (Metal)", provenance: hardware-spec, note: "24 or 32-core, confirm" }
+        - { id: ane, kind: ane, label: "Apple Neural Engine (16-core)", provenance: hardware-spec }
+      memory:
+        - { id: ram, kind: unified-ram, size_gb: 32, label: "Unified memory", provenance: documented }
+      nics:
+        - { id: lan,       kind: nic-ethernet, addr: "192.168.1.44", transport: lan-home,         provenance: "observed(tailscale direct)" }
+        - { id: tailscale, kind: vpn-tunnel,   addr: "100.77.1.30",  transport: tailscale-overlay, provenance: observed }
+    note: "Internals per ARCHITECTURE (documented); confirm before rendering as live."
+
+  - id: vps-ionos
+    provenance: observed
+    role: "SERVICES · Jart-OS-remote-server (tiers 0-9)"
+    type: vps
+    os: "Ubuntu 26.04 (x86-64, KVM/QEMU)"
+    net: { public_ip: "82.223.64.198", tailscale: "100.77.1.10" }
+    components:
+      compute:
+        - { id: vcpu, kind: vcpu, label: "QEMU/KVM vCPUs", provenance: observed, note: "count not captured (load avg ~8)" }
+      memory:
+        - { id: ram, kind: ram, size_gb: 24, label: "23Gi total (10Gi used at capture)", provenance: observed }
+      storage:
+        - { id: disk, kind: virtual-disk, provenance: observed }
+      nics:
+        - { id: ens6,        kind: nic-ethernet, addr: "82.223.64.198", virtio: true, transport: wan-internet,      provenance: observed }
+        - { id: tailscale0,  kind: vpn-tunnel,   addr: "100.77.1.10",   transport: tailscale-overlay,               provenance: observed }
+        - { id: docker-brs,  kind: docker-bridge, subnets: "172.18-28.x", transport: vps-docker-net,                provenance: observed }
+        - { id: lo,          kind: loopback,     addr: "127.0.0.1",                                                 provenance: observed }
+    host_services_observed: [tailscaled, docker, fail2ban, auditd, lynis, yubikey-val, jart-os-dashboard, chrony, postfix, ssh, unattended-upgrades, prometheus-node-exporter]
+    docker_services_observed:
+      proxy:        [{id: nginx, port: 10004, status: up}, {id: traefik, ports: ["10017","443"], status: up}]
+      voice:        [{id: livekit, ports: ["7881","5349","443/udp","50000-50100/udp","10205"], status: up}, {id: livekit-redis, status: up}]
+      messaging:    [{id: nats, ports: ["10302","4222","8222"], status: up}, {id: redis, port: 10301, status: up}]
+      identity:     [{id: authentik, ports: ["10201"], parts: [server, worker, postgres, redis], status: up}]
+      secrets:      [{id: vault, port: 10108, status: "up(unhealthy)"}]
+      monitoring:   [{id: grafana, port: 10001, status: up}, {id: prometheus, port: 10002, status: up}, {id: alertmanager, port: 10003, status: up}, {id: loki, port: 10008, status: up}, {id: cadvisor, port: 10009, status: up}, {id: blackbox, port: 10010, status: up}, {id: promtail, port: 10011, status: up}, {id: node-exporter, port: 10005, status: up}, {id: auditexporter, port: 10006, status: up}]
+      research:     [{id: searxng, port: 10341, status: restarting}, {id: maestro, port: 10342, status: "partial(pgvector up)"}, {id: gpt-researcher, port: 10343, status: up}, {id: perplexica, port: 10344, status: up}]
+      automation:   [{id: n8n, port: 16001, status: up}, {id: flowise, port: 15001, status: up}, {id: node-red, port: 16002, status: up}, {id: langflow, port: 15003, status: up}, {id: dify, port: 10608, status: up}, {id: openwork, port: 10609, status: up}]
+      interfaces:   [{id: homepage, port: 10703, status: up}, {id: open-webui, port: 10201, status: up}, {id: lobehub, port: 10202, status: up}, {id: agent-web-meet, port: 10208, status: up}, {id: dashboard-crud, port: 10706, status: up}, {id: iconprocessor, port: 10704, status: up}]
+      productivity: [{id: convertx, port: 10333, status: up}, {id: stirling-pdf, port: 10336, status: up}]
+      infra:        [{id: portainer, ports: ["10018","10019"], status: up}]
+
+  - id: remote-server-2
+    provenance: "observed(tailscale)"
+    type: server
+    os: linux
+    net: { tailscale: "100.118.124.101" }
+    seen: "offline (21m before capture)"
+
+  - id: pixel
+    provenance: "observed(tailscale)"
+    type: "mobile (android)"
+    net: { tailscale: "100.77.1.31" }
+    components: { compute: [{id: soc, kind: cpu, label: "mobile SoC", provenance: hardware-spec}], nics: [{id: wifi, kind: nic-wifi, provenance: hardware-spec}, {id: tailscale, kind: vpn-tunnel, addr: "100.77.1.31", transport: tailscale-overlay, provenance: observed}] }
+  - id: samsung-s9-fe
+    provenance: "observed(tailscale)"
+    type: "mobile (android)"
+    net: { tailscale: "100.77.1.32" }
+  - id: xiaomi-pad-5
+    provenance: "observed(tailscale)"
+    type: "tablet (android)"
+    net: { tailscale: "100.77.1.33" }
+    seen: "offline (23d before capture)"
+
+# ── Models (inference slots) — Mac mini config is REAL; others to confirm ──
+models:
+  - { id: primary, node: mac-mini-m1, port: 9001, source: local, engine: metal, type: chat,      file: "qwen2.5-7b-instruct-Q4_K_M.gguf",        context: 16384, compute: gpu, provenance: configured }
+  - { id: small,   node: mac-mini-m1, port: 9002, source: local, engine: metal, type: chat,      file: "Qwen3.5-2B-Q4_K_M.gguf",                 context: 8192,  compute: gpu, provenance: configured }
+  - { id: embed,   node: mac-mini-m1, port: 9003, source: local, engine: metal, type: embedding, file: "bge-m3-Q4_K_M.gguf",                      context: 512,   compute: gpu, provenance: configured }
+  - { id: coder,   node: mac-mini-m1, port: 9004, source: local, engine: metal, type: chat,      file: "Qwen2.5-Coder-3B-Instruct-Q4_K_M.gguf",  context: 16384, compute: gpu, provenance: configured }
+  - { id: fast,    node: mac-mini-m1, port: 9005, source: local, engine: metal, type: chat,      file: "Qwen3-1.7B-Q4_K_M.gguf",                 context: 8192,  compute: gpu, provenance: configured }
+  - { id: multi,   node: mac-mini-m1, port: 9006, source: local, engine: metal, type: chat,      file: "gemma-3n-E2B-it-Q4_K_M.gguf",            context: 8192,  compute: gpu, provenance: configured, caps: [vision] }
+  - { id: gpt-4o,  node: mac-mini-m1, port: 9010, source: api,   provider: openai, type: chat,   api_model: "gpt-4o",                             compute: cloud, provenance: configured }
+
+# ── Routes (high-level logical) ──
+routes:
+  - { id: chat-local, label: "Local chat (local-first)", flow: "client → jart-ura:9100 → llama-server :9001-9006", via: [http-mgmt, http-openai], provenance: configured }
+  - { id: chat-cloud, label: "Cloud fallback", flow: "client → jart-ura:9100 → API proxy :9010-9012 → provider", via: [http-mgmt, http-openai], provenance: "configured(gpt-4o)+documented" }
+  - { id: mesh-peer,  label: "Mesh sync", flow: "jart-ura → peer :9100/v1/models over Tailscale (15s)", via: [wireguard, http-mgmt], provenance: configured }
+  - { id: voice,      label: "Voice pipeline", flow: "browser → WebRTC → livekit(vps) → VAD → STT → LLM → TTS → WebRTC", via: [webrtc, websocket, http-openai], provenance: "documented+observed(livekit)" }
+  - { id: monitoring, label: "Telemetry", flow: "prometheus(vps) scrapes exporters → grafana", via: [http-web], provenance: observed }
+
+# ── Datapaths: the PHYSICAL hop sequence each request travels (what the camera
+#    illuminates piece by piece: cable → NIC → process → RAM → GPU/ANE → back) ──
+datapaths:
+  - id: dp-chat-local-lan
+    of_route: chat-local
+    provenance: "configured + hardware-spec(compute)"
+    hops:
+      - "client/nic"
+      - "transport:lan-home (ethernet or wifi)"
+      - "home-router"
+      - "mac-mini-m1/en0 (ethernet, active)"
+      - "mac-mini-m1/lo0 (kernel loopback)"
+      - "process:jart-ura :9100"
+      - "process:llama-server :900x"
+      - "mac-mini-m1/nvme (read model weights)"
+      - "mac-mini-m1/ram (unified, weights resident)"
+      - "mac-mini-m1/gpu (Metal compute, gpu_layers=99)"
+      - "mac-mini-m1/ram → process → en0 → client (response)"
+  - id: dp-chat-local-remote
+    of_route: chat-local
+    provenance: configured
+    hops:
+      - "client/nic"
+      - "transport:tailscale-overlay (WireGuard, UDP/41641 over WAN)"
+      - "mac-mini-m1/utun5 (tailscale)"
+      - "process:jart-ura :9100 → llama-server :900x"
+      - "mac-mini-m1/nvme → ram → gpu (Metal) → back"
+  - id: dp-chat-cloud
+    of_route: chat-cloud
+    provenance: "configured(gpt-4o)"
+    hops:
+      - "client → mac-mini-m1/en0"
+      - "process:jart-ura :9100 → API proxy :9010"
+      - "mac-mini-m1/en0 → transport:wan-internet"
+      - "provider:api.openai.com → response back"
+  - id: dp-mesh-peer
+    of_route: mesh-peer
+    provenance: configured
+    hops:
+      - "mac-mini-m1/process:jart-ura"
+      - "mac-mini-m1/utun5 → transport:tailscale-overlay"
+      - "peer/tailscale0 → peer/process:jart-ura :9100/v1/models"
+  - id: dp-voice
+    of_route: voice
+    provenance: "documented + observed(livekit live)"
+    hops:
+      - "client/mic → client/nic"
+      - "transport:wan-internet (or lan-home)"
+      - "vps-ionos/ens6"
+      - "transport:vps-docker-net (bridge → container)"
+      - "vps-ionos/livekit :7881 + WebRTC udp 50000-50100 (Opus)"
+      - "VAD (Silero) → STT"
+      - "transport:tailscale-overlay → mac-mini-m1/utun5"
+      - "mac-mini-m1/ane (whisper STT via CoreML) or cpu"
+      - "process:jart-ura → mac-mini-m1/gpu (LLM, Metal)"
+      - "mac-mini-m1/ane (Kokoro TTS via CoreML)"
+      - "back → tailscale → vps livekit → WebRTC → client/speaker"
+
+# ── State model the dashboard reflects (REAL state, never mock) ──
+states:
+  model: [running, degraded, failed, stopped]   # per model, from /v1/registry
+  node: [online, idle, offline]                  # per node, from tailscale/health
+  connection: [connecting, live, offline]        # dashboard ↔ /v1/registry feed
