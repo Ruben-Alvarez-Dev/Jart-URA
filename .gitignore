@@ -3,3 +3,9 @@ dist/
 *.map
 .env
 .env.*
+.DS_Store
+logs/
+*.bak
+.DS_Store
+logs/
+*.bak
