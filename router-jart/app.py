@@ -1,27 +1,55 @@
-"""Router-Jart — FastAPI app with enrichment middleware."""
+"""Router-Jart — FastAPI app: memory enrichment middleware + model-routing passthrough."""
 from __future__ import annotations
 
 import logging
 import time
+from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from src.enrichment.core.models import EnrichmentConfig
 from src.enrichment.factory import build_enrichment_service
 from src.enrichment.middleware import EnrichmentMiddleware
+from src.routing.core.models import RoutingConfig
+from src.routing.factory import build_routing_components
+from src.routing.router import router as routing_router
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("jart.router")
 
-app = FastAPI(title="Router-Jart", version="0.1.0")
-
 # Build enrichment service from env vars
 config = EnrichmentConfig.from_env()
 service = build_enrichment_service(config)
+routing_config = RoutingConfig.from_env()
 
-# Wrap app with enrichment middleware
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Own the shared HTTP client and the routing components for the app's lifetime."""
+    http_client = httpx.AsyncClient(
+        timeout=httpx.Timeout(
+            routing_config.read_timeout_s, connect=routing_config.connect_timeout_s
+        )
+    )
+    routing_service, chat_forwarder = build_routing_components(routing_config, http_client)
+    app.state.http_client = http_client
+    app.state.routing_service = routing_service
+    app.state.chat_forwarder = chat_forwarder
+    try:
+        yield
+    finally:
+        await http_client.aclose()
+
+
+app = FastAPI(title="Router-Jart", version="0.1.0", lifespan=lifespan)
+
+# Enrich POST /v1/chat/completions before it reaches the passthrough route (never blocks).
 app.add_middleware(EnrichmentMiddleware, service=service, config=config)
+
+# Mount the model-routing passthrough: POST /v1/chat/completions -> selected model.
+app.include_router(routing_router)
 
 
 @app.get("/health")

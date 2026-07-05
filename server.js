@@ -10,6 +10,7 @@ const proxyManager = require('./src/proxy-manager');
 const control = require('./src/control');
 const meshRegistry = require('./src/mesh-registry');
 const modelScanner = require('./src/model-scanner');
+const metricsSampler = require('./src/metrics-sampler');
 
 const CONFIG_PATH = process.env.JART_URA_CONFIG || path.join(__dirname, 'config', 'models.json');
 const PID_DIR = process.env.JART_URA_PID_DIR || path.join(__dirname, 'pids');
@@ -57,6 +58,12 @@ function start() {
     console.log(`[jart-ura] Management on :${mgmtPort}`);
     console.log(`[jart-ura] ${models.length} models configured`);
     meshRegistry.startPolling(CONFIG_PATH);
+    metricsSampler.startSampling(
+      () => configParser.getModels(CONFIG_PATH)
+        .filter((mm) => (mm.source || 'local') === 'local')
+        .map((mm) => ({ name: mm.name, port: mm.port, running: processManager.isModelRunning(mm.name) })),
+      15000,
+    );
   });
 
   process.on('SIGTERM', shutdown);
@@ -66,6 +73,7 @@ function start() {
 function shutdown() {
   console.log('[jart-ura] Shutting down...');
   meshRegistry.stopPolling();
+  metricsSampler.stopSampling();
   processManager.stopAll();
   proxyManager.stopAll();
   if (managementServer) managementServer.close();
@@ -118,6 +126,7 @@ function handleHealthFull(req, res) {
     const isLocal = (m.source || 'local') === 'local';
     const live = isLocal ? processManager.getModelStatus(m.name) : proxyManager.getProxyStatus(m.name);
     const running = isLocal ? processManager.isModelRunning(m.name) : proxyManager.isProxyRunning(m.name);
+    const metrics = isLocal ? metricsSampler.getMetrics(m.name) : null;
     return {
       name: m.name,
       port: m.port,
@@ -134,6 +143,14 @@ function handleHealthFull(req, res) {
       last_restart: live?.lastRestart ?? null,
       last_exit_code: live?.lastExitCode ?? null,
       log_path: live?.logPath ?? null,
+      tps: metrics?.tps ?? null,
+      load: metrics?.load ?? null,
+      req_active: metrics?.req_active ?? null,
+      p50: metrics?.p50 ?? null,
+      p95: metrics?.p95 ?? null,
+      p99: metrics?.p99 ?? null,
+      req_total: metrics?.req_total ?? null,
+      metrics_sampled_at: metrics?.sampled_at ?? null,
     };
   });
   const running = modelDetails.filter((m) => m.status === 'running').length;
@@ -153,6 +170,7 @@ function modelToJson(m, engines) {
   const isLocal = (m.source || 'local') === 'local';
   const running = isLocal ? processManager.isModelRunning(m.name) : proxyManager.isProxyRunning(m.name);
   const live = isLocal ? processManager.getModelStatus(m.name) : proxyManager.getProxyStatus(m.name);
+  const metrics = isLocal ? metricsSampler.getMetrics(m.name) : null;
   let status = running ? 'running' : 'stopped';
   if (isLocal && !running && live && live.lastExitCode != null && live.lastExitCode !== 0) status = 'failed';
 
@@ -189,6 +207,14 @@ function modelToJson(m, engines) {
     started_at: live?.startedAt ?? null,
     uptime: live?.uptimeMs ? humanUptime(live.uptimeMs) : '—',
     log_path: live?.logPath ?? null,
+    tps: metrics?.tps ?? null,
+    load: metrics?.load ?? null,
+    req_active: metrics?.req_active ?? null,
+    p50: metrics?.p50 ?? null,
+    p95: metrics?.p95 ?? null,
+    p99: metrics?.p99 ?? null,
+    req_total: metrics?.req_total ?? null,
+    metrics_sampled_at: metrics?.sampled_at ?? null,
   };
 }
 

@@ -57,7 +57,7 @@
   "engines": {
     "metal": {
       "bin": "engines/metal/llama-metal",
-      "default_args": ["--no-mmap", "--mlock"]
+      "default_args": ["--no-mmap", "--mlock", "--metrics"]
     },
     "coreml": {
       "bin": "engines/coreml/llama-coreml",
